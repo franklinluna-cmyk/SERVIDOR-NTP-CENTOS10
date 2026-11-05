@@ -8,7 +8,7 @@ Documentación del procedimiento para configurar un servidor de tiempo local (NT
 
 Primero se instala el paquete chrony:
 
-``bash
+
 sudo dnf install -y chrony
 Luego se edita el archivo /etc/chrony.conf:sudo nano /etc/chrony.conf
 Dentro del archivo se mantuvieron los pools públicos de tiempo y se agregó la instrucción allow para permitir consultas desde la red local:pool 2.centos.pool.ntp.org iburst
