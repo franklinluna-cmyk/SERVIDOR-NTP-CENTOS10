@@ -2,92 +2,80 @@
 
 ## 1. Objetivo
 
-Documentar la puesta en marcha y validación de SSH, NTP, FTP y HTTP en una máquina virtual CentOS Stream 10. La administración se realiza desde Windows y los clientes acceden mediante la red configurada en VirtualBox.
+Organizar la documentación de las prácticas realizadas con CentOS Stream 10 para levantar servicios de red: SSH, NTP, FTP y HTTP.
 
 ## 2. Topología lógica
 
 ```mermaid
 flowchart LR
-    W[Equipo Windows<br/>MobaXterm y navegador]
-    V[VirtualBox<br/>Adaptador puente]
-    C[VM CentOS Stream 10]
-    S1[SSH - TCP 22]
-    S2[NTP Chrony - UDP 123]
-    S3[FTP VSFTPD - TCP 21<br/>Pasivo TCP 30000-30100]
-    S4[HTTP Apache - TCP 80]
-    W --- V
-    V --- C
-    C --> S1
-    C --> S2
-    C --> S3
-    C --> S4
+    W[Windows<br/>MobaXterm y navegador]
+    VB[VirtualBox<br/>Máquina virtual]
+    C[CentOS Stream 10]
+    SSH[SSH<br/>TCP 22]
+    NTP[Chrony / NTP<br/>UDP 123]
+    FTP[VSFTPD<br/>TCP 21]
+    HTTP[Apache HTTPD<br/>TCP 80]
+    W --- VB
+    VB --- C
+    C --> SSH
+    C --> NTP
+    C --> FTP
+    C --> HTTP
 ```
 
-La topología representa la arquitectura lógica. La IP y la máscara de la VM deben registrarse después de consultar la configuración real de red.
+Windows se utiliza como equipo cliente. MobaXterm permite conectarse por SSH y realizar transferencias FTP; el navegador permite consultar la página publicada por Apache.
 
-## 3. Datos del entorno
+## 3. Datos documentados del entorno
 
-| Elemento | Dato que se debe registrar |
+| Elemento | Dato que consta en los registros |
 |---|---|
-| Sistema | CentOS Stream 10 |
-| Virtualizador | Oracle VirtualBox |
-| Adaptador | Puente, si la red del laboratorio lo permite |
-| IP de la VM | Consultar con ip -br -4 addr |
-| Interfaz de red | Consultar con ip route |
-| Red/CIDR | Confirmar con la máscara real |
-| Cliente | Windows |
-| Cliente FTP | MobaXterm |
-| Usuario de administración | Cuenta normal con sudo |
-| Usuario FTP | ftpandres, sin privilegios administrativos |
+| Sistema operativo | CentOS Stream 10 |
+| Virtualización | VirtualBox |
+| Cliente de administración y FTP | MobaXterm |
+| Servidor FTP | VSFTPD |
+| Usuario FTP | ftpandres |
+| IP usada en la prueba FTP | 10.21.165.107 |
+| Directorio FTP | /home/ftpandres/archivos |
+| Servidor NTP | Chrony |
+| Red permitida en chrony.conf | 192.168.1.0/24 |
+| Servidor web | Apache HTTPD |
+| Directorio web | /var/www/html |
 
-**Importante:** la IP 10.21.165.107 fue utilizada en una prueba FTP anterior. Debe verificarse de nuevo porque puede cambiar. La red 192.168.1.0/24 que figuraba en el README anterior no se debe reutilizar sin confirmar que sea la red actual.
+La IP FTP y la red NTP se copian de los registros originales de cada práctica; no se asume que pertenezcan a la misma configuración de red.
 
 ## 4. Matriz de puertos y servicios
 
-| Servicio | Protocolo | Puerto | Uso | Regla Firewalld |
-|---|---|---:|---|---|
-| SSH | TCP | 22 | Administración remota | service ssh |
-| NTP | UDP | 123 | Sincronización de hora | service ntp |
-| FTP control | TCP | 21 | Inicio de sesión y comandos | service ftp |
-| FTP datos activo | TCP | 20 | Canal de datos en modo activo | Solo si se utiliza ese modo |
-| FTP datos pasivo | TCP | 30000-30100 | Transferencia en modo pasivo | Rango configurado |
-| HTTP | TCP | 80 | Sitio web | service http |
-| HTTPS | TCP | 443 | Web cifrada | Solo cuando TLS esté configurado |
+| Servicio | Protocolo | Puerto | Función |
+|---|---|---:|---|
+| SSH | TCP | 22 | Administración remota |
+| NTP | UDP | 123 | Sincronización de hora |
+| FTP - control | TCP | 21 | Conexión y comandos FTP |
+| HTTP | TCP | 80 | Acceso a la página web |
 
-Abrir solo los puertos necesarios. La regla FTP debe coincidir con el rango pasivo configurado en VSFTPD. No abrir el puerto 443 sin haber configurado HTTPS.
+En las notas FTP se indica que MobaXterm se configuró en modo pasivo, pero el registro no especifica un rango pasivo de puertos. Por esa razón no se inventa un rango en esta matriz.
 
-## 5. Matriz de seguridad
+## 5. Matriz de firewall y seguridad
 
-| Servicio | Control de seguridad | Verificación |
-|---|---|---|
-| General | SELinux en Enforcing | getenforce |
-| General | Firewalld activo | systemctl is-active firewalld |
-| SSH | Acceso con cuenta normal; root remoto deshabilitado | sshd -T; whoami |
-| NTP | Clientes limitados por allow a la red local | /etc/chrony.conf |
-| FTP | Usuario sin shell ni sudo | getent passwd; sudo -l -U |
-| FTP | Usuario encerrado en HOME | chroot_local_user=YES |
-| FTP | Escritura solo en subcarpeta archivos | ls -ld; prueba de subida |
-| FTP | Permisos SELinux específicos | getsebool ftp_home_dir |
-| HTTP | Contenido con etiqueta httpd_sys_content_t | ls -Z /var/www/html |
+| Servicio | Configuración que consta en GitHub |
+|---|---|
+| SSH | Se agregó el servicio ssh de forma permanente y se recargó Firewalld |
+| NTP | Se agregó el servicio ntp de forma permanente y se recargó Firewalld |
+| FTP | Se agregó el servicio ftp y se guardó de forma permanente |
+| HTTP | Se agregó el servicio http de forma permanente y se recargó Firewalld |
 
-## 6. Preparación y comandos generales
+**SELinux:** el objetivo de la práctica incluye revisar la seguridad con SELinux. Sin embargo, en los README originales no constan modificaciones específicas de SELinux ni salidas de comandos que demuestren su estado. No se presentan como realizadas acciones que no aparecen en el registro.
 
-Consultar información de red:
+## 6. Comandos generales de consulta
 
 ```bash
-ip -br -4 addr
-ip route
 hostname -I
-```
-
-Consultar Firewalld y SELinux:
-
-```bash
-systemctl is-active firewalld
-sudo firewall-cmd --get-active-zones
+whoami
+systemctl status sshd
+systemctl status chronyd
+systemctl status vsftpd
+systemctl status httpd
 sudo firewall-cmd --list-all
 getenforce
-sestatus
 ```
 
-Los comandos deben ejecutarse con la cuenta administrativa del laboratorio y sudo cuando corresponda.
+Estos comandos permiten consultar datos de red, usuario, servicios, firewall y estado de SELinux.
