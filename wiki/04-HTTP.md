@@ -2,23 +2,32 @@
 
 ## 1. Arquitectura y Requisitos
 
-HTTP permite publicar una página web alojada en CentOS Stream 10 para consultarla desde un navegador de la red.
+La práctica configura un servidor web en CentOS Stream 10 usando Apache HTTPD. La página se consulta desde Windows mediante un navegador.
 
-- **Servidor:** máquina virtual CentOS Stream 10.
-- **Servidor web:** Apache HTTP Server (paquete httpd).
-- **Cliente:** navegador de Windows o curl desde CentOS.
-- **Directorio web:** /var/www/html.
-- **Puerto:** TCP 80.
-- **Requisitos:** IP accesible y Firewalld activo.
+- Servidor: CentOS Stream 10.
+- Servicio: Apache HTTPD (httpd).
+- Cliente: navegador web de Windows.
+- Herramienta de prueba local: curl.
+- Directorio de publicación: /var/www/html.
+- Puerto: TCP 80.
 
-Identificar la IP actual:
+## 2. Despliegue y Configuración
+
+Instalar SSH, Firewalld, Apache y curl según los pasos registrados:
+
+```bash
+sudo dnf install -y openssh-server firewalld
+sudo systemctl enable --now firewalld sshd
+sudo firewall-cmd --permanent --add-service=ssh
+sudo firewall-cmd --reload
+```
+
+Consultar la IP y el usuario de CentOS:
 
 ```bash
 hostname -I
-ip -br -4 addr
+whoami
 ```
-
-## 2. Despliegue y Configuración
 
 Instalar Apache y curl:
 
@@ -26,107 +35,70 @@ Instalar Apache y curl:
 sudo dnf install -y httpd curl
 ```
 
-Iniciar Apache y habilitar el arranque automático:
+Iniciar Apache y habilitar su arranque automático:
 
 ```bash
 sudo systemctl enable --now httpd
-systemctl is-active httpd
 ```
 
-Crear una página HTML sencilla:
+Permitir conexiones HTTP:
+
+```bash
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --reload
+```
+
+Crear la página principal:
 
 ```bash
 echo '<h1>Servidor web de Franklin</h1><p>CentOS con Apache HTTPD funcionando.</p>' | sudo tee /var/www/html/index.html
 ```
 
-Revisar la sintaxis de la configuración:
+Comprobar la configuración y el funcionamiento:
 
 ```bash
 sudo apachectl configtest
-```
-
-El resultado esperado es Syntax OK.
-
-Permitir HTTP en Firewalld:
-
-```bash
-sudo firewall-cmd --permanent --add-service=http
-sudo firewall-cmd --reload
-sudo firewall-cmd --list-services
-```
-
-Probar desde el propio servidor:
-
-```bash
-curl -I http://localhost
+systemctl is-active httpd
 curl http://localhost
 ```
 
-Desde Windows abrir un navegador e ingresar:
-
-```text
-http://<IP_CENTOS>
-```
-
-Debe mostrarse la página creada.
+Desde el navegador de Windows se ingresó `http://` seguido de la IP del servidor.
 
 ## 3. Aseguramiento Seguridad SELinux/Firewall
 
-Mantener SELinux en Enforcing:
+La práctica registra la apertura del servicio HTTP en Firewalld. Apache utiliza TCP 80 para entregar la página.
+
+Comandos de consulta:
 
 ```bash
-getenforce
-sestatus
-```
-
-El contenido web estándar debe tener el contexto SELinux httpd_sys_content_t. Comprobarlo y restaurar las etiquetas predeterminadas si fuera necesario:
-
-```bash
-ls -Z /var/www/html
-sudo restorecon -Rv /var/www/html
-```
-
-No desactivar SELinux ni asignar permisos 777. Para una página estática, Apache solo necesita leer el contenido; no necesita permiso general de escritura sobre el directorio.
-
-Permitir HTTP, que utiliza TCP 80:
-
-```bash
-sudo firewall-cmd --get-active-zones
+sudo firewall-cmd --list-services
 sudo firewall-cmd --list-all
+getenforce
+ls -Z /var/www/html
 ```
 
-No abrir TCP 443 como si HTTPS ya estuviera configurado. El puerto 443 se utiliza solamente después de configurar TLS y un certificado válido.
-
-Si se utiliza un directorio distinto de /var/www, se debe asignar un contexto SELinux adecuado en vez de desactivar la protección.
+**Alcance del registro:** el README original documenta la regla HTTP del firewall y la página web en /var/www/html. No registra cambios específicos de SELinux; por lo tanto, no se afirma que se haya modificado esa política.
 
 ## 4. Pruebas de Aceptación y Troubleshooting
 
-**Criterios de aceptación**
+Las comprobaciones registradas son:
 
-| Prueba | Comando o acción | Resultado esperado |
+| Comprobación | Comando o acción | Resultado esperado |
 |---|---|---|
-| Servicio | systemctl is-active httpd | active |
-| Configuración | apachectl configtest | Syntax OK |
-| Puerto | ss -tlnp | grep :80 | httpd escucha en TCP 80 |
-| Firewall | firewall-cmd --list-services | aparece http |
-| Página local | curl -I http://localhost | HTTP/1.1 200 OK |
-| Página remota | navegador de Windows | aparece el contenido HTML |
-| SELinux | ls -Z /var/www/html | etiqueta httpd_sys_content_t |
+| Configuración Apache | apachectl configtest | Syntax OK |
+| Estado del servicio | systemctl is-active httpd | active |
+| Consulta local | curl http://localhost | muestra el HTML |
+| Consulta desde Windows | navegador con http://IP | aparece la página |
 
-**Errores frecuentes**
+El contenido de la página creada fue:
 
-1. **Connection timed out o no abre desde Windows:** revisar IP, red de VirtualBox, conectividad y servicio http en Firewalld.
-2. **403 Forbidden:** revisar permisos de lectura y etiquetas SELinux con ls -Z; aplicar restorecon -Rv /var/www/html.
-3. **Apache no inicia:** ejecutar apachectl configtest, revisar journalctl -u httpd y comprobar que otro proceso no esté ocupando el puerto 80.
+**Servidor web de Franklin**  
+CentOS con Apache HTTPD funcionando.
 
-Comandos de diagnóstico:
+**Tres problemas frecuentes y su revisión**
 
-```bash
-sudo systemctl status httpd
-sudo journalctl -u httpd -n 50 --no-pager
-sudo apachectl configtest
-sudo ss -tlnp | grep ':80'
-sudo firewall-cmd --list-all
-```
+1. **La página no abre desde Windows:** revisar la IP actual, la red de VirtualBox y la regla HTTP del firewall.
+2. **Apache no inicia:** revisar `sudo systemctl status httpd` y `sudo apachectl configtest`.
+3. **Aparece un error al mostrar el contenido:** comprobar que el archivo exista en /var/www/html/index.html y revisar los registros con `sudo journalctl -u httpd -n 50`.
 
-**Evidencia que se debe adjuntar:** servicio httpd activo, resultado Syntax OK, puerto 80 y regla HTTP, etiqueta SELinux del archivo index.html, respuesta curl y página abierta desde Windows.
+**Evidencia registrada:** el README del repositorio servidor-web contiene los pasos para crear la página y probarla con curl y desde el navegador. Para la entrega, adjuntar las capturas originales de las pruebas.
