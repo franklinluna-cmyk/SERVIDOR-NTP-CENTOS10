@@ -206,4 +206,3 @@ getsebool -a | grep ftpd
 sudo ausearch -m AVC -ts recent
 ```
 
-**Evidencia para adjuntar:** captura de la conexión FTP, usuario sin privilegios administrativos, shell `/sbin/nologin`, directorio HOME restringido, contexto SELinux y transferencia correcta del archivo. Las capturas deben tomarse después de aplicar y comprobar la configuración.
