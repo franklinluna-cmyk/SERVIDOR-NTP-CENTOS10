@@ -2,193 +2,133 @@
 
 ## 1. Arquitectura y Requisitos
 
-FTP permite transferir archivos entre Windows y CentOS Stream 10 mediante VSFTPD.
+La práctica configura un servidor FTP en CentOS Stream 10 con VSFTPD. La transferencia se realiza desde Windows utilizando MobaXterm.
 
-- **Servidor:** máquina virtual CentOS Stream 10.
-- **Cliente:** MobaXterm en Windows.
-- **Servicio:** vsftpd.
-- **Usuario FTP:** ftpandres (cuenta normal, sin privilegios administrativos).
-- **Directorio permitido:** /home/ftpandres, con una subcarpeta escribible llamada archivos.
-- **Puerto de control:** TCP 21.
-- **Modo de datos:** pasivo, TCP 30000-30100 en esta guía.
-
-FTP tradicional no cifra usuario, contraseña ni datos. Utilizarlo solo en la red controlada del laboratorio. Para un entorno real expuesto a otras redes, configurar FTPS o preferir un protocolo seguro.
+- Servidor: CentOS Stream 10.
+- Servicio: VSFTPD.
+- Cliente: MobaXterm.
+- Usuario utilizado: ftpandres.
+- Puerto de control: TCP 21.
+- Modo de transferencia utilizado: pasivo.
+- Directorio usado en la prueba: /home/ftpandres/archivos.
 
 ## 2. Despliegue y Configuración
 
-Instalar VSFTPD e iniciar el servicio:
+Comprobar si VSFTPD está instalado:
 
 ```bash
-sudo dnf install -y vsftpd
+rpm -q vsftpd
+```
+
+Instalar el servicio:
+
+```bash
+sudo dnf install vsftpd -y
+```
+
+Iniciar el servicio y habilitar el arranque automático:
+
+```bash
 sudo systemctl enable --now vsftpd
-systemctl is-active vsftpd
+systemctl status vsftpd
 ```
 
-Crear el usuario si todavía no existe. Si ya existe, conservarlo y ajustar su shell:
+Crear el usuario y asignarle una contraseña:
 
 ```bash
-getent passwd ftpandres
-```
-
-Si el comando anterior no devuelve una cuenta, crearla:
-
-```bash
-sudo useradd -m -s /usr/sbin/nologin ftpandres
-```
-
-Si ftpandres ya existe, asignarle el shell sin inicio de sesión:
-
-```bash
-sudo usermod -s /usr/sbin/nologin ftpandres
-```
-
-Asignar o actualizar la contraseña FTP:
-
-```bash
+sudo useradd -m ftpandres
 sudo passwd ftpandres
 ```
 
-VSFTPD utiliza autenticación PAM. En sistemas donde pam_shells.so está activo, el shell nologin debe estar incluido en /etc/shells para permitir el acceso FTP. Comprobar la ruta y agregarla si falta:
+Crear la carpeta para los archivos:
 
 ```bash
-command -v nologin
-grep -E 'nologin' /etc/shells
+sudo -u ftpandres mkdir -p /home/ftpandres/archivos
 ```
 
-Si la ruta que devuelve command -v nologin no aparece en /etc/shells, agregar exactamente esa ruta. Ejemplo habitual:
+Consultar la IP de CentOS y las opciones principales de VSFTPD:
 
 ```bash
-echo /usr/sbin/nologin | sudo tee -a /etc/shells
+hostname -I
+sudo grep -E '^(anonymous_enable|local_enable|write_enable)=' /etc/vsftpd/vsftpd.conf
 ```
 
-Preparar el directorio para que el usuario quede encerrado en su HOME, pero pueda escribir únicamente en archivos:
+Permitir FTP en Firewalld:
 
 ```bash
-sudo chown root:root /home/ftpandres
-sudo chmod 755 /home/ftpandres
-sudo install -d -o ftpandres -g ftpandres -m 750 /home/ftpandres/archivos
+sudo firewall-cmd --add-service=ftp
+sudo firewall-cmd --permanent --add-service=ftp
 ```
 
-Editar la configuración:
+**Datos utilizados en MobaXterm**
 
-```bash
-sudo cp -a /etc/vsftpd/vsftpd.conf /etc/vsftpd/vsftpd.conf.bak
-sudo nano /etc/vsftpd/vsftpd.conf
-```
-
-Asegurarse de que las siguientes opciones existan una sola vez y tengan estos valores:
-
-```text
-anonymous_enable=NO
-local_enable=YES
-write_enable=YES
-chroot_local_user=YES
-allow_writeable_chroot=NO
-pasv_enable=YES
-pasv_min_port=30000
-pasv_max_port=30100
-```
-
-No dejar el HOME directamente escribible por ftpandres; la carpeta archivos es la zona destinada a las transferencias. Reiniciar y verificar:
-
-```bash
-sudo systemctl restart vsftpd
-systemctl is-active vsftpd
-sudo ss -tlnp | grep ':21'
-```
-
-En MobaXterm crear una sesión FTP con la IP actual de CentOS, usuario ftpandres, puerto 21 y modo pasivo habilitado. Subir un archivo a /archivos y descargarlo nuevamente.
+| Campo | Valor registrado |
+|---|---|
+| IP | 10.21.165.107 |
+| Usuario | ftpandres |
+| Puerto | 21 |
+| Modo | Pasivo |
 
 ## 3. Aseguramiento Seguridad SELinux/Firewall
 
-**Cuenta limitada**
+En la práctica registrada se habilitó el servicio FTP en Firewalld. El puerto de control es TCP 21.
 
-Comprobar que el usuario no pertenece al grupo wheel y que no tiene permisos sudo:
-
-```bash
-id ftpandres
-sudo -l -U ftpandres
-getent passwd ftpandres
-```
-
-El shell debe terminar en nologin. El usuario FTP no debe utilizarse para administración del sistema.
-
-**Encierro en HOME**
-
-Con chroot_local_user=YES, los usuarios locales quedan encerrados en su directorio personal. El HOME debe pertenecer a root y no ser escribible por ftpandres; la subcarpeta archivos pertenece al usuario.
+Comandos de consulta:
 
 ```bash
-ls -ld /home/ftpandres /home/ftpandres/archivos
-```
-
-**Firewall**
-
-Abrir el puerto de control y el rango pasivo configurado:
-
-```bash
-sudo firewall-cmd --permanent --add-service=ftp
-sudo firewall-cmd --permanent --add-port=30000-30100/tcp
-sudo firewall-cmd --reload
+sudo firewall-cmd --list-services
 sudo firewall-cmd --list-all
-```
-
-El rango del firewall debe coincidir con pasv_min_port y pasv_max_port. Si se cambia el rango en VSFTPD, actualizar también Firewalld. Para una VM detrás de NAT puede ser necesario configurar la dirección pasiva y redirección de puertos; con adaptador puente normalmente se accede directamente a la IP de la VM.
-
-**SELinux**
-
-Mantener SELinux activo y revisar el booleano específico para directorios HOME:
-
-```bash
 getenforce
-getsebool ftp_home_dir
 ```
 
-Si el acceso a los directorios HOME es bloqueado por SELinux, habilitar únicamente el permiso específico requerido:
+**Alcance del registro:** la documentación original muestra la creación del usuario local `ftpandres` y la apertura del servicio FTP. No registra que se haya cambiado su shell a `nologin`, configurado el encierro `chroot`, abierto un rango pasivo específico o modificado una política SELinux. Por eso esos ajustes no se presentan como realizados.
 
-```bash
-sudo setsebool -P ftp_home_dir on
-```
-
-No habilitar ftpd_full_access como solución general: concede permisos mucho más amplios. Si continúa el bloqueo, revisar las etiquetas y los eventos AVC:
-
-```bash
-ls -Zd /home/ftpandres /home/ftpandres/archivos
-sudo ausearch -m AVC -ts recent
-```
+El enunciado de la práctica menciona el aislamiento del usuario y SELinux. Si el licenciado exige evidencia de esas configuraciones, deben aparecer en capturas o comandos ejecutados durante el laboratorio; no es correcto afirmar que se aplicaron basándose únicamente en la creación del usuario.
 
 ## 4. Pruebas de Aceptación y Troubleshooting
 
-**Criterios de aceptación**
+**Prueba de transferencia registrada**
 
-| Prueba | Comando o acción | Resultado esperado |
+1. Se conectó MobaXterm a la IP `10.21.165.107`, con el usuario `ftpandres`, puerto 21 y modo pasivo.
+2. Se subió el archivo `prueba.txt` a `/home/ftpandres/archivos`.
+3. Se comprobó el archivo desde CentOS:
+
+```bash
+sudo cat /home/ftpandres/archivos/prueba.txt
+```
+
+El contenido mostrado fue:
+
+```text
+Prueba FTP de Andres Luna.
+```
+
+4. Se descargó el archivo a Windows mediante MobaXterm y se verificó que conservaba el mismo contenido.
+
+**Criterios de comprobación**
+
+| Comprobación | Acción o comando | Resultado registrado/esperado |
 |---|---|---|
-| Servicio | systemctl is-active vsftpd | active |
-| Puerto | ss -tlnp | grep :21 | vsftpd escucha en TCP 21 |
-| Usuario | id ftpandres; sudo -l -U ftpandres | cuenta normal, sin sudo ni grupo wheel |
-| Shell | getent passwd ftpandres | muestra nologin |
-| Encierro | iniciar FTP y navegar directorios | no puede salir de HOME |
-| Subida | enviar prueba.txt a /archivos | archivo recibido |
-| Lectura | cat /home/ftpandres/archivos/prueba.txt | contenido correcto |
-| Descarga | descargar desde MobaXterm | archivo coincide con el original |
-| Firewall | firewall-cmd --list-all | FTP y rango pasivo permitidos |
-| SELinux | getenforce | Enforcing |
+| Servicio | systemctl status vsftpd | revisar que esté activo |
+| IP y usuario | hostname -I; id ftpandres | consultar datos de conexión |
+| Firewall | firewall-cmd --list-services | aparece ftp |
+| Subida | cargar prueba.txt con MobaXterm | archivo recibido |
+| Contenido | cat /home/ftpandres/archivos/prueba.txt | texto correcto |
+| Descarga | descargar desde MobaXterm | archivo conservado |
 
-**Resultado documentado previamente:** se realizó una transferencia con MobaXterm usando la cuenta ftpandres, la IP 10.21.165.107 y el puerto 21. Se subió prueba.txt a /home/ftpandres/archivos; el contenido comprobado en CentOS fue “Prueba FTP de Andres Luna.” y luego se descargó a Windows. Esta evidencia demuestra la transferencia, pero no sustituye las pruebas adicionales de usuario nologin, chroot y SELinux.
+**Tres problemas frecuentes y su revisión**
 
-**Errores frecuentes**
-
-1. **530 Login incorrect:** revisar contraseña, local_enable=YES, anonymous_enable=NO, la existencia del usuario y la autenticación PAM. Comprobar que la ruta nologin esté incluida en /etc/shells cuando pam_shells.so la requiera.
-2. **550 Permission denied al subir:** revisar write_enable=YES, permisos de /home/ftpandres/archivos, propiedad del directorio y el booleano ftp_home_dir. No solucionar con chmod 777 ni con ftpd_full_access.
-3. **La sesión conecta, pero se queda esperando al transferir:** comprobar modo pasivo en MobaXterm, rango 30000-30100 en vsftpd.conf y Firewalld, y configuración NAT si corresponde.
+1. **No conecta al servidor:** revisar la IP, el servicio vsftpd y la regla FTP del firewall.
+2. **No permite iniciar sesión:** comprobar el usuario, la contraseña y las opciones local_enable y anonymous_enable.
+3. **No permite transferir archivos:** comprobar write_enable, la carpeta de destino y el modo pasivo en MobaXterm.
 
 Comandos de diagnóstico:
 
 ```bash
 sudo systemctl status vsftpd
 sudo journalctl -u vsftpd -n 50 --no-pager
-sudo grep -E '^(anonymous_enable|local_enable|write_enable|chroot_local_user|pasv_enable|pasv_min_port|pasv_max_port)=' /etc/vsftpd/vsftpd.conf
+sudo grep -E '^(anonymous_enable|local_enable|write_enable)=' /etc/vsftpd/vsftpd.conf
 sudo firewall-cmd --list-all
-getsebool ftp_home_dir
 ```
 
-**Evidencia que se debe adjuntar:** usuario y shell (sin mostrar contraseña), resultado de sudo -l -U ftpandres, permisos del HOME y archivos, configuración VSFTPD, Firewalld, SELinux y captura de subida/descarga en MobaXterm.
+**Evidencia registrada:** la subida, lectura y descarga de `prueba.txt` se encuentran descritas en el README del repositorio servidor-web.
