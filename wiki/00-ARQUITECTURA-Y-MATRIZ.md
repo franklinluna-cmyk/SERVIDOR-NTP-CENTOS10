@@ -23,8 +23,6 @@ flowchart LR
     C --> HTTP
 ```
 
-Windows se utiliza como equipo cliente. MobaXterm permite conectarse por SSH y realizar transferencias FTP; el navegador permite consultar la página publicada por Apache.
-
 ## 3. Datos documentados del entorno
 
 | Elemento | Dato que consta en los registros |
@@ -41,7 +39,7 @@ Windows se utiliza como equipo cliente. MobaXterm permite conectarse por SSH y r
 | Servidor web | Apache HTTPD |
 | Directorio web | /var/www/html |
 
-La IP FTP y la red NTP se copian de los registros originales de cada práctica; no se asume que pertenezcan a la misma configuración de red.
+Los datos corresponden a sus respectivas prácticas; no se asume que pertenecen a la misma configuración de red.
 
 ## 4. Matriz de puertos y servicios
 
@@ -50,20 +48,28 @@ La IP FTP y la red NTP se copian de los registros originales de cada práctica; 
 | SSH | TCP | 22 | Administración remota |
 | NTP | UDP | 123 | Sincronización de hora |
 | FTP - control | TCP | 21 | Conexión y comandos FTP |
+| FTP - pasivo | TCP | Rango configurado en VSFTPD | Transferencia de datos en modo pasivo |
 | HTTP | TCP | 80 | Acceso a la página web |
 
-En las notas FTP se indica que MobaXterm se configuró en modo pasivo, pero el registro no especifica un rango pasivo de puertos. Por esa razón no se inventa un rango en esta matriz.
+En las notas FTP se indica que MobaXterm se configuró en modo pasivo, pero el registro no especifica el rango pasivo. Debe utilizarse el mismo rango en VSFTPD y Firewalld; no se inventa un valor como si ya estuviera configurado.
 
 ## 5. Matriz de firewall y seguridad
 
-| Servicio | Configuración que consta en GitHub |
+| Servicio | Regla de Firewalld |
 |---|---|
-| SSH | Se agregó el servicio ssh de forma permanente y se recargó Firewalld |
-| NTP | Se agregó el servicio ntp de forma permanente y se recargó Firewalld |
-| FTP | Se agregó el servicio ftp y se guardó de forma permanente |
-| HTTP | Se agregó el servicio http de forma permanente y se recargó Firewalld |
+| SSH | servicio ssh permanente |
+| NTP | servicio ntp permanente |
+| FTP | servicio ftp permanente |
+| HTTP | servicio http permanente |
 
-**SELinux:** el objetivo de la práctica incluye revisar la seguridad con SELinux. Sin embargo, en los README originales no constan modificaciones específicas de SELinux ni salidas de comandos que demuestren su estado. No se presentan como realizadas acciones que no aparecen en el registro.
+### SELinux
+
+- **SSH:** comprobar el estado con `getenforce`; no se requiere cambiar la política para el uso estándar del servicio.
+- **NTP:** mantener SELinux activo y comprobar registros AVC si Chrony presenta denegaciones.
+- **FTP:** limitar el acceso al HOME del usuario, usar `/sbin/nologin`, etiquetar solo la carpeta de transferencia como `public_content_rw_t` y habilitar únicamente el booleano FTP necesario que exista en la política instalada.
+- **HTTP:** conservar el contexto estándar `httpd_sys_content_t` en `/var/www/html` mediante `restorecon`.
+
+No se recomienda desactivar SELinux ni habilitar permisos generales como `ftpd_full_access` sin una necesidad demostrada.
 
 ## 6. Comandos generales de consulta
 
@@ -77,5 +83,3 @@ systemctl status httpd
 sudo firewall-cmd --list-all
 getenforce
 ```
-
-Estos comandos permiten consultar datos de red, usuario, servicios, firewall y estado de SELinux.
