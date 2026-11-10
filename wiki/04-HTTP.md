@@ -13,22 +13,6 @@ La práctica configura un servidor web en CentOS Stream 10 usando Apache HTTPD. 
 
 ## 2. Despliegue y Configuración
 
-Instalar SSH, Firewalld, Apache y curl según los pasos registrados:
-
-```bash
-sudo dnf install -y openssh-server firewalld
-sudo systemctl enable --now firewalld sshd
-sudo firewall-cmd --permanent --add-service=ssh
-sudo firewall-cmd --reload
-```
-
-Consultar la IP y el usuario de CentOS:
-
-```bash
-hostname -I
-whoami
-```
-
 Instalar Apache y curl:
 
 ```bash
@@ -62,43 +46,72 @@ systemctl is-active httpd
 curl http://localhost
 ```
 
-Desde el navegador de Windows se ingresó `http://` seguido de la IP del servidor.
+Desde el navegador de Windows se ingresa `http://` seguido de la IP del servidor.
 
 ## 3. Aseguramiento Seguridad SELinux/Firewall
 
-La práctica registra la apertura del servicio HTTP en Firewalld. Apache utiliza TCP 80 para entregar la página.
+### Firewalld
 
-Comandos de consulta:
+Permitir HTTP en el firewall:
 
 ```bash
-sudo firewall-cmd --list-services
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --reload
 sudo firewall-cmd --list-all
-getenforce
-ls -Z /var/www/html
 ```
 
-**Alcance del registro:** el README original documenta la regla HTTP del firewall y la página web en /var/www/html. No registra cambios específicos de SELinux; por lo tanto, no se afirma que se haya modificado esa política.
+El servicio HTTP utiliza TCP 80. El puerto HTTPS 443 solo debe abrirse si se configura TLS.
+
+### SELinux
+
+Mantener SELinux en modo Enforcing. El contenido estático publicado en `/var/www/html` debe tener el contexto `httpd_sys_content_t`, que permite a Apache leer los archivos sin concederle permisos de escritura sobre el contenido:
+
+```bash
+getenforce
+ls -Zd /var/www/html
+ls -Z /var/www/html
+sudo restorecon -Rv /var/www/html
+```
+
+No es necesario activar permisos de escritura para Apache para servir una página HTML estática. Tampoco se debe desactivar SELinux ni usar permisos generales como `chmod 777`.
+
+Si Apache no puede leer un archivo, revisar los eventos de SELinux:
+
+```bash
+sudo ausearch -m AVC -ts recent
+```
 
 ## 4. Pruebas de Aceptación y Troubleshooting
-
-Las comprobaciones registradas son:
 
 | Comprobación | Comando o acción | Resultado esperado |
 |---|---|---|
 | Configuración Apache | apachectl configtest | Syntax OK |
 | Estado del servicio | systemctl is-active httpd | active |
 | Consulta local | curl http://localhost | muestra el HTML |
+| Contexto SELinux | ls -Z /var/www/html | archivos con httpd_sys_content_t |
 | Consulta desde Windows | navegador con http://IP | aparece la página |
 
-El contenido de la página creada fue:
+La página creada contiene:
 
 **Servidor web de Franklin**  
 CentOS con Apache HTTPD funcionando.
 
-**Tres problemas frecuentes y su revisión**
+### Tres problemas frecuentes y su revisión
 
-1. **La página no abre desde Windows:** revisar la IP actual, la red de VirtualBox y la regla HTTP del firewall.
+1. **La página no abre desde Windows:** revisar IP, red de VirtualBox y regla HTTP de Firewalld.
 2. **Apache no inicia:** revisar `sudo systemctl status httpd` y `sudo apachectl configtest`.
-3. **Aparece un error al mostrar el contenido:** comprobar que el archivo exista en /var/www/html/index.html y revisar los registros con `sudo journalctl -u httpd -n 50`.
+3. **Apache no puede leer el contenido:** revisar los permisos y el contexto SELinux; aplicar `sudo restorecon -Rv /var/www/html` y consultar los eventos AVC si continúa el error.
 
-**Evidencia registrada:** el README del repositorio servidor-web contiene los pasos para crear la página y probarla con curl y desde el navegador. Para la entrega, adjuntar las capturas originales de las pruebas.
+Comandos de diagnóstico:
+
+```bash
+sudo systemctl status httpd
+sudo apachectl configtest
+sudo journalctl -u httpd -n 50 --no-pager
+sudo firewall-cmd --list-all
+ls -Z /var/www/html
+getenforce
+sudo ausearch -m AVC -ts recent
+```
+
+**Evidencia para adjuntar:** captura de `apachectl configtest`, estado activo de httpd, página abierta desde Windows y contexto SELinux de /var/www/html.
