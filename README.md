@@ -125,7 +125,7 @@ ipconfig
 | HTTP | `--add-service=http` | TCP 80 |
 | HTTPS | `--add-service=https` | TCP 443, solo si se configura TLS |
 
-Los cambios deben aplicarse en la zona activa de Firewalld. Consultar primero:
+Los cambios deben aplicarse en la zona asociada a la interfaz de red de CentOS. Consultar primero. Los comandos siguientes usan la zona predeterminada; si la interfaz aparece en otra zona, añade `--zone=<ZONA_ACTIVA>` a los comandos de Firewalld para aplicar la regla en esa interfaz:
 
 ```bash
 sudo firewall-cmd --get-active-zones
@@ -589,17 +589,27 @@ getsebool -a | grep -E 'ftp|ftpd'
 ls -Zd /home/ftpandres /home/ftpandres/archivos
 ```
 
-Para permitir el acceso FTP a directorios personales, comprobar el booleano `ftp_home_dir`. Si existe y está desactivado, habilitarlo de forma persistente:
+Para permitir el acceso FTP a directorios personales, comprobar el booleano `ftp_home_dir`:
 
 ```bash
 getsebool ftp_home_dir
+```
+
+Si el booleano existe, está desactivado y la prueba confirma una denegación SELinux al acceder al HOME, habilitarlo de forma persistente:
+
+```bash
 sudo setsebool -P ftp_home_dir on
 ```
 
-Para el modo pasivo, consultar si la política instalada ofrece `ftpd_use_passive_mode`. Solo si existe y se confirma una denegación SELinux relacionada con la apertura de puertos pasivos, habilitarlo:
+Para el modo pasivo, comprobar si la política instalada ofrece `ftpd_use_passive_mode`:
 
 ```bash
 getsebool ftpd_use_passive_mode
+```
+
+Solo si el booleano existe y se confirma una denegación SELinux relacionada con la apertura de puertos pasivos, habilitarlo:
+
+```bash
 sudo setsebool -P ftpd_use_passive_mode on
 ```
 
@@ -1021,6 +1031,8 @@ ls -lZ /var/www/html
 getsebool ftp_home_dir
 sudo setsebool -P ftp_home_dir on
 ```
+
+Si se necesita publicar archivos recibidos por FTP, es más seguro recibirlos en `/home/ftpandres/archivos` y copiarlos al directorio web mediante un procedimiento administrativo controlado. No se debe conceder escritura general a VSFTPD sobre `/var/www/html` ni relajar el contexto HTTP para evitar una denegación.
 
 **Resolución HTTP:** restaurar los contextos estándar de la carpeta web:
 
